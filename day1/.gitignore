@@ -2,6 +2,7 @@
 **/secrets.toml
 **/secret.toml
 **/chat_feedback.db
+.env*/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

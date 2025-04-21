@@ -9,9 +9,11 @@ import torch
 from transformers import pipeline
 from config import MODEL_NAME
 from huggingface_hub import HfFolder
+from PIL import Image
+import tempfile
 
 # --- アプリケーション設定 ---
-st.set_page_config(page_title="Gemma Chatbot", layout="wide")
+st.set_page_config(page_title="InternVL Chatbot", layout="wide")
 
 # --- 初期化処理 ---
 # NLTKデータのダウンロード（初回起動時など）
@@ -32,7 +34,7 @@ def load_model():
         device = "cuda" if torch.cuda.is_available() else "cpu"
         st.info(f"Using device: {device}") # 使用デバイスを表示
         pipe = pipeline(
-            "text-generation",
+            "image-text-to-text",
             model=MODEL_NAME,
             model_kwargs={"torch_dtype": torch.bfloat16},
             device=device
@@ -46,8 +48,8 @@ def load_model():
 pipe = llm.load_model()
 
 # --- Streamlit アプリケーション ---
-st.title("🤖 Gemma 2 Chatbot with Feedback")
-st.write("Gemmaモデルを使用したチャットボットです。回答に対してフィードバックを行えます。")
+st.title("🧠 InternVL Chatbot with Image Input")
+st.write("InternVLモデルを使用したマルチモーダルチャットボットです。画像とテキストを組み合わせて質問できます。")
 st.markdown("---")
 
 # --- サイドバー ---
@@ -68,7 +70,41 @@ page = st.sidebar.radio(
 # --- メインコンテンツ ---
 if st.session_state.page == "チャット":
     if pipe:
-        ui.display_chat_page(pipe)
+        uploaded_image = st.file_uploader("画像をアップロード", type=["png", "jpg", "jpeg"])
+        text_input = st.text_area("質問を入力", "")
+
+        if st.button("送信"):
+            if not text_input:
+                st.warning("質問を入力してください。")
+            else:
+                messages = [{"role": "user", "content": []}]
+
+                if uploaded_image:
+                    image = Image.open(uploaded_image).convert("RGB")
+                    st.image(image, caption="アップロードされた画像")  # ✅ 表示を外に出す
+
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
+                        image.save(tmp.name)
+                        image_path = tmp.name
+
+                    messages[0]["content"].append({
+                        "type": "image",
+                        "image": image_path  # str型のファイルパス
+                    })
+
+                messages[0]["content"].append({
+                    "type": "text",
+                    "text": text_input
+                })
+                print(messages)
+
+                try:
+                    output = pipe(messages, max_new_tokens=256, return_full_text=False)
+                    result = output[0]["generated_text"].strip()
+                    st.markdown("### モデルの応答")
+                    st.write(result if result else "モデルからの応答がありませんでした。")
+                except Exception as e:
+                    st.error(f"エラーが発生しました: {e}")
     else:
         st.error("チャット機能を利用できません。モデルの読み込みに失敗しました。")
 elif st.session_state.page == "履歴閲覧":
